@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Application
     debug: bool = False
     environment: Literal["development", "staging", "production"] = "development"
-    secret_key: str = Field(..., min_length=32)
+    secret_key: str = "change-me-in-production-min-32-characters"
     api_version: str = "v1"
 
     # Database (optional for local dev)
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     fly_region: str = "sjc"  # San Jose, CA
 
     # JWT Authentication
-    jwt_secret_key: str = Field(..., min_length=32)
+    jwt_secret_key: str = "change-me-jwt-secret-min-32-characters"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
