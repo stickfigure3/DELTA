@@ -5,12 +5,17 @@ from datetime import datetime
 from typing import AsyncGenerator
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from delta import __version__
 from delta.config import get_settings
 from delta.api.routes import auth, agents, sandboxes, files, exec, messaging
+from delta.api.websocket.terminal import (
+    manager as ws_manager,
+    user_websocket_endpoint,
+    agent_websocket_endpoint,
+)
 
 logger = structlog.get_logger()
 
@@ -80,5 +85,63 @@ async def root() -> dict:
         "description": "Cloud-based sandbox-as-a-service for self-improving LLM agents",
         "docs": "/docs",
         "health": "/health",
+        "websocket": {
+            "user": "/v1/ws/user/{agent_id}?user_id={user_id}",
+            "agent": "/v1/ws/agent/{agent_id}?api_key={api_key}",
+        },
         "google_doc": "https://docs.google.com/document/d/1lGc8EZbQq5pW0jq3Lgl95sk9RQMQiHCXZjQMIdIdP98/edit",
     }
+
+
+# =============================================================================
+# WebSocket Endpoints - Agent-to-User Communication
+# =============================================================================
+
+@app.websocket("/v1/ws/user/{agent_id}")
+async def websocket_user(
+    websocket: WebSocket,
+    agent_id: str,
+    user_id: str = Query(..., description="User ID"),
+):
+    """
+    WebSocket endpoint for USERS to watch their agent's activity.
+    
+    Connect: ws://host/v1/ws/user/{agent_id}?user_id={user_id}
+    
+    Receive messages:
+        {"type": "agent_message", "content": "...", "sender": "agent", ...}
+        {"type": "status", "content": "Agent connected", ...}
+        {"type": "system", "content": "...", ...}
+    
+    Send messages:
+        {"type": "message", "content": "Hello agent!"}
+        {"type": "ping"}
+    """
+    await user_websocket_endpoint(websocket, agent_id, user_id)
+
+
+@app.websocket("/v1/ws/agent/{agent_id}")
+async def websocket_agent(
+    websocket: WebSocket,
+    agent_id: str,
+    api_key: str = Query(..., description="Agent API key"),
+):
+    """
+    WebSocket endpoint for AGENTS to send messages to users.
+    
+    Connect: ws://host/v1/ws/agent/{agent_id}?api_key={api_key}
+    
+    Send messages to users:
+        {"type": "message", "content": "Hello user!", "msg_type": "agent_message"}
+        {"type": "status", "content": "Processing your request..."}
+    
+    Receive messages from users:
+        {"type": "user_message", "content": "...", "sender": "user", ...}
+    """
+    await agent_websocket_endpoint(websocket, agent_id, api_key)
+
+
+@app.get("/v1/ws/stats")
+async def websocket_stats() -> dict:
+    """Get WebSocket connection statistics."""
+    return ws_manager.get_stats()
