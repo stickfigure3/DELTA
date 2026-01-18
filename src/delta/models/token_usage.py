@@ -39,8 +39,8 @@ class TokenUsage(Base):
     task_description = Column(Text, nullable=True)
     model = Column(String(100), nullable=True)  # e.g., "claude-3-opus"
     
-    # Metadata
-    metadata = Column(Text, nullable=True)  # JSON for additional data
+    # Extra Data
+    extra_data = Column(Text, nullable=True)  # JSON for additional data
     
     # Timestamp
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
