@@ -1,35 +1,21 @@
-"""FastAPI application for DELTA platform."""
+"""FastAPI application for DELTA platform - Minimal Production Version."""
 
 import os
-from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncGenerator
-
 from fastapi import FastAPI, WebSocket, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-# Version
 __version__ = "0.1.0"
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan manager."""
-    print(f"Starting DELTA platform v{__version__}")
-    yield
-    print("Shutting down DELTA platform")
-
 
 app = FastAPI(
     title="DELTA Platform",
     description="Cloud-based sandbox-as-a-service for self-improving LLM agents",
     version=__version__,
-    lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# CORS middleware
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,34 +24,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Import routes lazily to avoid startup errors
-try:
-    from delta.api.routes import auth, agents, sandboxes, files, exec, messaging
-    app.include_router(auth.router, prefix="/v1/auth", tags=["authentication"])
-    app.include_router(agents.router, prefix="/v1/agents", tags=["agents"])
-    app.include_router(sandboxes.router, prefix="/v1/sandboxes", tags=["sandboxes"])
-    app.include_router(exec.router, prefix="/v1/sandboxes", tags=["execution"])
-    app.include_router(files.router, prefix="/v1/sandboxes", tags=["files"])
-    app.include_router(messaging.router, prefix="/v1/messaging", tags=["messaging"])
-except Exception as e:
-    print(f"Warning: Could not load some routes: {e}")
 
-# Import WebSocket handlers lazily
-try:
-    from delta.api.websocket.terminal import (
-        manager as ws_manager,
-        user_websocket_endpoint,
-        agent_websocket_endpoint,
-    )
-    WS_ENABLED = True
-except Exception as e:
-    print(f"Warning: WebSocket not available: {e}")
-    WS_ENABLED = False
-    ws_manager = None
-
+# =============================================================================
+# Core Endpoints (Always Available)
+# =============================================================================
 
 @app.get("/health")
-async def health_check() -> dict:
+async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
@@ -75,46 +40,128 @@ async def health_check() -> dict:
 
 
 @app.get("/")
-async def root() -> dict:
-    """Root endpoint with API information."""
+async def root():
+    """Root endpoint."""
     return {
         "name": "DELTA Platform",
         "version": __version__,
-        "description": "Cloud-based sandbox-as-a-service for self-improving LLM agents",
+        "status": "running",
         "docs": "/docs",
         "health": "/health",
-        "websocket": {
-            "user": "/v1/ws/user/{agent_id}?user_id={user_id}",
-            "agent": "/v1/ws/agent/{agent_id}?api_key={api_key}",
-        },
-        "google_doc": "https://docs.google.com/document/d/1lGc8EZbQq5pW0jq3Lgl95sk9RQMQiHCXZjQMIdIdP98/edit",
     }
 
 
 # =============================================================================
-# WebSocket Endpoints - Agent-to-User Communication
+# Try to load full routes (graceful degradation)
 # =============================================================================
 
-if WS_ENABLED:
-    @app.websocket("/v1/ws/user/{agent_id}")
-    async def websocket_user(
-        websocket: WebSocket,
-        agent_id: str,
-        user_id: str = Query(..., description="User ID"),
-    ):
-        """WebSocket endpoint for USERS to watch their agent's activity."""
-        await user_websocket_endpoint(websocket, agent_id, user_id)
+routes_loaded = []
+routes_failed = []
 
-    @app.websocket("/v1/ws/agent/{agent_id}")
-    async def websocket_agent(
-        websocket: WebSocket,
-        agent_id: str,
-        api_key: str = Query(..., description="Agent API key"),
-    ):
-        """WebSocket endpoint for AGENTS to send messages to users."""
-        await agent_websocket_endpoint(websocket, agent_id, api_key)
+def try_load_route(module_path, router_attr, prefix, tags):
+    """Try to load a route, gracefully handle failures."""
+    global routes_loaded, routes_failed
+    try:
+        module = __import__(module_path, fromlist=[router_attr])
+        router = getattr(module, router_attr)
+        app.include_router(router, prefix=prefix, tags=tags)
+        routes_loaded.append(prefix)
+    except Exception as e:
+        routes_failed.append({"prefix": prefix, "error": str(e)})
 
-    @app.get("/v1/ws/stats")
-    async def websocket_stats() -> dict:
-        """Get WebSocket connection statistics."""
-        return ws_manager.get_stats()
+# Load routes
+try_load_route("delta.api.routes.auth", "router", "/v1/auth", ["authentication"])
+try_load_route("delta.api.routes.agents", "router", "/v1/agents", ["agents"])
+try_load_route("delta.api.routes.sandboxes", "router", "/v1/sandboxes", ["sandboxes"])
+try_load_route("delta.api.routes.exec", "router", "/v1/sandboxes", ["execution"])
+try_load_route("delta.api.routes.files", "router", "/v1/sandboxes", ["files"])
+try_load_route("delta.api.routes.messaging", "router", "/v1/messaging", ["messaging"])
+
+
+@app.get("/v1/status")
+async def api_status():
+    """Check which routes are loaded."""
+    return {
+        "routes_loaded": routes_loaded,
+        "routes_failed": routes_failed,
+    }
+
+
+# =============================================================================
+# WebSocket (for agent-to-user communication)
+# =============================================================================
+
+# Simple in-memory message store
+connections = {}
+messages = {}
+
+
+@app.websocket("/v1/ws/user/{agent_id}")
+async def websocket_user(websocket: WebSocket, agent_id: str, user_id: str = Query("anonymous")):
+    """WebSocket for users to watch their agent."""
+    await websocket.accept()
+    
+    if agent_id not in connections:
+        connections[agent_id] = {"users": set(), "agent": None}
+    connections[agent_id]["users"].add(websocket)
+    
+    await websocket.send_json({"type": "connected", "agent_id": agent_id})
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            # Forward user message to agent
+            if connections[agent_id]["agent"]:
+                await connections[agent_id]["agent"].send_json({
+                    "type": "user_message",
+                    "content": data.get("content", ""),
+                    "user_id": user_id,
+                })
+    except:
+        connections[agent_id]["users"].discard(websocket)
+
+
+@app.websocket("/v1/ws/agent/{agent_id}")
+async def websocket_agent(websocket: WebSocket, agent_id: str, api_key: str = Query("test")):
+    """WebSocket for agents to send messages to users."""
+    await websocket.accept()
+    
+    if agent_id not in connections:
+        connections[agent_id] = {"users": set(), "agent": None}
+    connections[agent_id]["agent"] = websocket
+    
+    await websocket.send_json({"type": "connected", "agent_id": agent_id})
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            # Broadcast to all users watching this agent
+            dead = set()
+            for user_ws in connections[agent_id]["users"]:
+                try:
+                    await user_ws.send_json({
+                        "type": "agent_message",
+                        "content": data.get("content", ""),
+                        "agent_id": agent_id,
+                    })
+                except:
+                    dead.add(user_ws)
+            connections[agent_id]["users"] -= dead
+    except:
+        connections[agent_id]["agent"] = None
+
+
+@app.get("/v1/ws/stats")
+async def ws_stats():
+    """WebSocket stats."""
+    return {
+        "agents": list(connections.keys()),
+        "total_connections": sum(len(c["users"]) + (1 if c["agent"] else 0) for c in connections.values()),
+    }
+
+
+# Startup message
+print(f"DELTA Platform v{__version__} starting...")
+print(f"Routes loaded: {routes_loaded}")
+if routes_failed:
+    print(f"Routes failed: {routes_failed}")
