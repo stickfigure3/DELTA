@@ -133,7 +133,7 @@ Bot → requests tokens → Main Agent → approves → User Dashboard → confi
 
 ## 🚀 Quick Start
 
-### Local Development with Docker
+### Option A: Local Development with Docker
 
 ```bash
 # Build and run locally (uses port 8000 by default)
@@ -145,7 +145,10 @@ Bot → requests tokens → Main Agent → approves → User Dashboard → confi
 # Test the health endpoint
 curl http://localhost:8000/health
 
-# Run Docker tests
+# View API docs
+open http://localhost:8000/docs
+
+# Run Docker integration tests
 pytest tests/v0.1/test_docker.py -v
 
 # View container logs
@@ -155,14 +158,23 @@ docker logs -f delta-local
 docker stop delta-local
 ```
 
-### Deploy to Railway
+### Option B: Deploy to Cloud (Railway/Render)
+
+See [DEPLOY.md](DEPLOY.md) for detailed deployment instructions.
 
 ```bash
-# Push to main branch - Railway auto-deploys
+# Push to main branch - Railway/Render auto-deploys
 git push origin main
 
-# Environment variables are set automatically by Railway
-# The PORT variable is injected at runtime
+# Environment variables are configured in the platform dashboard
+# PORT is injected automatically at runtime
+```
+
+**Quick Test After Deployment:**
+```bash
+# Replace with your actual deployment URL
+curl https://your-app.railway.app/health
+curl https://your-app.railway.app/docs
 ```
 
 ### Installation (SDK)
@@ -229,126 +241,216 @@ asyncio.run(main())
 ## 📁 Project Structure
 
 ```
-delta.2/
+uva/
 ├── README.md                 # This file
 ├── pyproject.toml           # Python dependencies
-├── package.json             # TypeScript SDK dependencies
+├── Dockerfile               # Production container
+├── Procfile                 # Heroku/Railway/Render process file
+├── railway.json             # Railway deployment config
+├── render.yaml              # Render.com deployment config
+├── env.example              # Environment variables template
+├── DEPLOY.md                # Deployment guide
+├── SETUP_GUIDE.md           # Setup instructions
+├── LICENSE                  # MIT License
 │
 ├── src/
-│   ├── delta/               # Core Python package
-│   │   ├── __init__.py
-│   │   ├── api/             # FastAPI REST endpoints
-│   │   │   ├── main.py
-│   │   │   ├── routes/
-│   │   │   │   ├── auth.py
-│   │   │   │   ├── agents.py
-│   │   │   │   ├── sandboxes.py
-│   │   │   │   ├── files.py
-│   │   │   │   ├── exec.py
-│   │   │   │   └── messaging.py
-│   │   │   └── middleware/
-│   │   │       ├── auth.py
-│   │   │       └── rate_limit.py
-│   │   │
-│   │   ├── core/            # Core business logic
-│   │   │   ├── auth.py      # Authentication & accounts
-│   │   │   ├── tokens.py    # Token metering & allocation
-│   │   │   ├── agents.py    # Agent lifecycle management
-│   │   │   └── messaging.py # Email/SMS/Voice handling
-│   │   │
-│   │   ├── sandbox/         # Sandbox management
-│   │   │   ├── flyio.py     # Fly.io Machines integration
-│   │   │   ├── executor.py  # Command execution
-│   │   │   └── filesystem.py# File operations
-│   │   │
-│   │   ├── sdk/             # Python SDK client
-│   │   │   ├── client.py
-│   │   │   └── models.py
-│   │   │
-│   │   ├── models/          # Database models
-│   │   │   ├── user.py
-│   │   │   ├── agent.py
-│   │   │   ├── token_usage.py
-│   │   │   └── message_log.py
-│   │   │
-│   │   └── config.py        # Configuration management
-│   │
-│   └── typescript/          # TypeScript SDK
-│       ├── src/
-│       │   ├── index.ts
-│       │   ├── client.ts
-│       │   └── types.ts
-│       └── package.json
-│
-├── infra/                   # Infrastructure as Code
-│   ├── terraform/           # Terraform configs
-│   │   ├── main.tf
-│   │   ├── flyio.tf
-│   │   └── variables.tf
-│   └── docker/
-│       └── Dockerfile.sandbox
+│   └── delta/               # Core Python package
+│       ├── __init__.py
+│       ├── config.py        # Configuration management
+│       │
+│       ├── api/             # FastAPI REST endpoints
+│       │   ├── __init__.py
+│       │   ├── main.py      # Application entry point
+│       │   ├── routes/
+│       │   │   ├── __init__.py
+│       │   │   ├── auth.py
+│       │   │   ├── agents.py
+│       │   │   ├── sandboxes.py
+│       │   │   ├── files.py
+│       │   │   ├── exec.py
+│       │   │   └── messaging.py
+│       │   └── websocket/   # WebSocket handlers
+│       │       ├── __init__.py
+│       │       └── terminal.py
+│       │
+│       ├── core/            # Core business logic
+│       │   ├── __init__.py
+│       │   ├── auth.py      # Authentication & accounts
+│       │   ├── tokens.py    # Token metering & allocation
+│       │   ├── agents.py    # Agent lifecycle management
+│       │   └── messaging.py # Email/SMS/Voice handling
+│       │
+│       ├── sdk/             # Python SDK client
+│       │   ├── __init__.py
+│       │   ├── client.py
+│       │   └── models.py
+│       │
+│       └── models/          # Database models
+│           ├── __init__.py
+│           ├── user.py
+│           ├── agent.py
+│           ├── token_usage.py
+│           └── message_log.py
 │
 ├── tests/                   # Test suites
+│   ├── __init__.py
 │   └── v0.1/               # Version 0.1 tests
+│       ├── __init__.py
+│       ├── README.md        # Test documentation
 │       ├── test_auth.py
 │       ├── test_agents.py
 │       ├── test_sandbox.py
 │       ├── test_tokens.py
 │       ├── test_messaging.py
-│       ├── test_docker.py   # Docker integration tests
-│       └── README.md        # Test documentation
+│       └── test_docker.py   # Docker integration tests
 │
 ├── scripts/                 # Utility scripts
 │   ├── start.sh            # Container startup script
 │   └── docker-local.sh     # Local Docker dev script
 │
 ├── docs/                    # Documentation
-│   ├── ARCHITECTURE.md      # Detailed architecture
-│   ├── API.md              # API reference
-│   └── diagrams/           # Visual diagrams
-│       └── system_overview.mmd
+│   └── ARCHITECTURE.md      # Detailed architecture
 │
 └── examples/                # Example usage
-    ├── basic_usage.py
-    ├── multi_agent.py
-    └── claude_integration.py
+    └── agent_client.py      # Agent WebSocket client example
 ```
 
 ---
 
 ## 🐳 Docker & Deployment
 
-### Local vs Production
+### Deployment Options
 
-| Aspect | Local Docker | Railway (Production) |
-|--------|--------------|---------------------|
-| Port | Set via `-e PORT=8000` or defaults to 8000 | Injected by Railway |
+DELTA supports multiple deployment targets. Choose based on your needs:
+
+| Platform | Best For | Pricing | Setup Difficulty |
+|----------|----------|---------|------------------|
+| **Railway** | Production (recommended) | Free tier + pay-as-you-go | Easy |
+| **Render** | Production alternative | Free tier available | Easy |
+| **Local Docker** | Development & testing | Free | Easy |
+
+### Quick Comparison: Local Docker vs Cloud
+
+| Aspect | Local Docker | Railway/Render (Production) |
+|--------|--------------|----------------------------|
+| Port | Set via `-e PORT=8000` or defaults to 8000 | Injected automatically by platform |
 | Database | SQLite (default) | PostgreSQL (via `DATABASE_URL`) |
 | Redis | Optional | Configured via `REDIS_URL` |
-| Debug | Enabled | Disabled |
+| Debug | Enabled (`-e DEBUG=true`) | Disabled |
 | CORS | Allow all | Configure for production |
+| Health Check | `http://localhost:8000/health` | Auto-configured by platform |
 
-### Environment Variables
+---
+
+### Option 1: Railway (Recommended for Production)
+
+Railway auto-deploys from GitHub and handles PORT injection automatically.
+
+**Configuration Files:**
+- `railway.json` - Build and deploy settings
+- `Dockerfile` - Container definition
+- `scripts/start.sh` - Startup script (handles PORT env var)
+
+**Deploy Steps:**
+1. Sign up at https://railway.app (use GitHub login)
+2. Create new project → "Deploy from GitHub repo"
+3. Select your repository
+4. Add environment variables:
+   ```bash
+   SECRET_KEY=<generate-random-32-char-string>
+   JWT_SECRET_KEY=<generate-random-32-char-string>
+   DATABASE_URL=sqlite+aiosqlite:///./delta.db  # Or PostgreSQL URL
+   ENVIRONMENT=production
+   DEBUG=false
+   ```
+5. Deploy! Railway auto-detects the Dockerfile
+
+**How Railway Works:**
+- Railway injects `PORT` environment variable at runtime
+- `scripts/start.sh` reads `PORT` and starts uvicorn on that port
+- Health checks hit `/health` endpoint (configured in `railway.json`)
+
+---
+
+### Option 2: Render.com
+
+**Configuration File:** `render.yaml`
+
+**Deploy Steps:**
+1. Sign up at https://render.com (use GitHub login)
+2. New → Web Service → Connect GitHub repo
+3. Settings: Runtime: Docker, Instance Type: Free
+4. Environment variables same as Railway
+5. Create Web Service
+
+---
+
+### Option 3: Local Docker (Development)
+
+For local development and testing without cloud deployment.
+
+```bash
+# Build and run locally (uses port 8000 by default)
+./scripts/docker-local.sh
+
+# Or specify a custom port
+./scripts/docker-local.sh 8080
+
+# Test the health endpoint
+curl http://localhost:8000/health
+
+# View container logs
+docker logs -f delta-local
+
+# Stop the container
+docker stop delta-local
+```
+
+**What the script does:**
+1. Builds Docker image from `Dockerfile`
+2. Runs container with `-e PORT=8000 -e DEBUG=true`
+3. Maps port to host
+4. Runs health check to verify startup
+
+---
+
+### Environment Variables Reference
 
 ```bash
 # Required for production
-DATABASE_URL=postgresql://...      # Set by Railway
-REDIS_URL=redis://...              # Set by Railway  
-SECRET_KEY=your-secret-key         # Set manually
-JWT_SECRET_KEY=your-jwt-secret     # Set manually
+SECRET_KEY=your-secret-key         # Set manually (32+ chars)
+JWT_SECRET_KEY=your-jwt-secret     # Set manually (32+ chars)
+
+# Database (optional - defaults to SQLite)
+DATABASE_URL=postgresql://...      # Set by Railway/Render or manually
+REDIS_URL=redis://...              # Optional caching
 
 # Optional integrations
-FLY_API_TOKEN=...                  # For sandbox VMs
-ANTHROPIC_API_KEY=...              # For Claude
+FLY_API_TOKEN=...                  # For Fly.io sandbox VMs
+ANTHROPIC_API_KEY=...              # For Claude AI
 STRIPE_SECRET_KEY=...              # For payments
 ```
 
+See `env.example` for full list of environment variables.
+
+---
+
 ### Dockerfile Architecture
 
-The container uses a startup script (`scripts/start.sh`) to properly handle the `PORT` environment variable, which is required for Railway's health checks. The script:
-1. Reads `PORT` from environment (defaults to 8000)
-2. Starts uvicorn bound to `0.0.0.0:$PORT`
-3. Logs startup information
+The container uses a startup script (`scripts/start.sh`) to properly handle the `PORT` environment variable:
+
+```bash
+#!/bin/bash
+PORT="${PORT:-8000}"
+echo "Starting DELTA Platform on port $PORT"
+exec uvicorn delta.api.main:app --host 0.0.0.0 --port "$PORT"
+```
+
+This ensures compatibility with:
+- **Railway**: Injects PORT at runtime
+- **Render**: Injects PORT at runtime  
+- **Local Docker**: Uses PORT=8000 default or custom `-e PORT=XXXX`
+- **Procfile**: For Heroku-style deployments
 
 ---
 

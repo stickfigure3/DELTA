@@ -94,8 +94,11 @@ async def demo_conversation():
     async with websockets.connect(agent_uri) as agent_ws, \
                websockets.connect(user_uri) as user_ws:
         
-        print("✅ Agent connected")
-        print("✅ User connected")
+        # Read connection confirmation messages
+        agent_confirm = await agent_ws.recv()
+        user_confirm = await user_ws.recv()
+        print(f"✅ Agent connected: {json.loads(agent_confirm)}")
+        print(f"✅ User connected: {json.loads(user_confirm)}")
         
         # Agent sends greeting
         await agent_ws.send(json.dumps({
@@ -108,9 +111,10 @@ async def demo_conversation():
         # Small delay to let message propagate
         await asyncio.sleep(0.5)
         
-        # User receives and responds
+        # User receives agent message
         user_msg = await asyncio.wait_for(user_ws.recv(), timeout=5.0)
-        print(f"👤 User received: {json.loads(user_msg)['content'][:50]}...")
+        parsed = json.loads(user_msg)
+        print(f"👤 User received: {parsed.get('content', parsed)[:50] if isinstance(parsed.get('content'), str) else parsed}...")
         
         # User sends a message
         await user_ws.send(json.dumps({
@@ -138,7 +142,8 @@ async def demo_conversation():
         
         # User receives response
         user_msg = await asyncio.wait_for(user_ws.recv(), timeout=5.0)
-        print(f"👤 User received: {json.loads(user_msg)['content'][:50]}...")
+        parsed = json.loads(user_msg)
+        print(f"👤 User received: {parsed.get('content', str(parsed))[:50]}...")
         
         print("\n" + "=" * 60)
         print("✅ Demo complete! Agent-to-User communication working.")
