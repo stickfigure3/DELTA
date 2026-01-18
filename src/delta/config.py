@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, RedisDsn
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,13 +23,13 @@ class Settings(BaseSettings):
     secret_key: str = Field(..., min_length=32)
     api_version: str = "v1"
 
-    # Database
-    database_url: PostgresDsn
+    # Database (optional for local dev)
+    database_url: str = "sqlite+aiosqlite:///./delta_dev.db"
     database_pool_size: int = 5
     database_max_overflow: int = 10
 
-    # Redis
-    redis_url: RedisDsn
+    # Redis (optional for local dev)
+    redis_url: str = "redis://localhost:6379"
 
     # Fly.io
     fly_api_token: str = ""
