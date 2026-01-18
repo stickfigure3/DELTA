@@ -133,7 +133,39 @@ Bot → requests tokens → Main Agent → approves → User Dashboard → confi
 
 ## 🚀 Quick Start
 
-### Installation
+### Local Development with Docker
+
+```bash
+# Build and run locally (uses port 8000 by default)
+./scripts/docker-local.sh
+
+# Or specify a custom port
+./scripts/docker-local.sh 8080
+
+# Test the health endpoint
+curl http://localhost:8000/health
+
+# Run Docker tests
+pytest tests/v0.1/test_docker.py -v
+
+# View container logs
+docker logs -f delta-local
+
+# Stop the container
+docker stop delta-local
+```
+
+### Deploy to Railway
+
+```bash
+# Push to main branch - Railway auto-deploys
+git push origin main
+
+# Environment variables are set automatically by Railway
+# The PORT variable is injected at runtime
+```
+
+### Installation (SDK)
 
 ```bash
 # Python SDK
@@ -263,7 +295,12 @@ delta.2/
 │       ├── test_sandbox.py
 │       ├── test_tokens.py
 │       ├── test_messaging.py
+│       ├── test_docker.py   # Docker integration tests
 │       └── README.md        # Test documentation
+│
+├── scripts/                 # Utility scripts
+│   ├── start.sh            # Container startup script
+│   └── docker-local.sh     # Local Docker dev script
 │
 ├── docs/                    # Documentation
 │   ├── ARCHITECTURE.md      # Detailed architecture
@@ -276,6 +313,42 @@ delta.2/
     ├── multi_agent.py
     └── claude_integration.py
 ```
+
+---
+
+## 🐳 Docker & Deployment
+
+### Local vs Production
+
+| Aspect | Local Docker | Railway (Production) |
+|--------|--------------|---------------------|
+| Port | Set via `-e PORT=8000` or defaults to 8000 | Injected by Railway |
+| Database | SQLite (default) | PostgreSQL (via `DATABASE_URL`) |
+| Redis | Optional | Configured via `REDIS_URL` |
+| Debug | Enabled | Disabled |
+| CORS | Allow all | Configure for production |
+
+### Environment Variables
+
+```bash
+# Required for production
+DATABASE_URL=postgresql://...      # Set by Railway
+REDIS_URL=redis://...              # Set by Railway  
+SECRET_KEY=your-secret-key         # Set manually
+JWT_SECRET_KEY=your-jwt-secret     # Set manually
+
+# Optional integrations
+FLY_API_TOKEN=...                  # For sandbox VMs
+ANTHROPIC_API_KEY=...              # For Claude
+STRIPE_SECRET_KEY=...              # For payments
+```
+
+### Dockerfile Architecture
+
+The container uses a startup script (`scripts/start.sh`) to properly handle the `PORT` environment variable, which is required for Railway's health checks. The script:
+1. Reads `PORT` from environment (defaults to 8000)
+2. Starts uvicorn bound to `0.0.0.0:$PORT`
+3. Logs startup information
 
 ---
 
@@ -370,7 +443,7 @@ delta.2/
 ## 🧪 Running Tests
 
 ```bash
-# Run all v0.1 tests
+# Run all v0.1 tests (unit tests)
 pytest tests/v0.1/ -v
 
 # Run specific test
@@ -378,7 +451,25 @@ pytest tests/v0.1/test_auth.py -v
 
 # Run with coverage
 pytest tests/v0.1/ --cov=src/delta --cov-report=html
+
+# Run Docker integration tests (requires running container)
+./scripts/docker-local.sh 8000
+pytest tests/v0.1/test_docker.py -v
+
+# Quick connectivity check (without pytest)
+python tests/v0.1/test_docker.py
 ```
+
+### Test Categories
+
+| Test File | Type | Requirements |
+|-----------|------|--------------|
+| `test_auth.py` | Unit | None |
+| `test_agents.py` | Unit | None |
+| `test_sandbox.py` | Unit | None |
+| `test_tokens.py` | Unit | None |
+| `test_messaging.py` | Unit | None |
+| `test_docker.py` | Integration | Running Docker container |
 
 ---
 
